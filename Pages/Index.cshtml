@@ -1,0 +1,274 @@
+﻿@page
+@model LocalQwenChat.Pages.IndexModel
+
+@{
+    ViewData["Title"] = "Local Qwen Chat";
+}
+
+<div class="container mt-5">
+
+    <h1>Local Qwen Chat</h1>
+
+    <p class="text-muted">
+        Model: qwen3:8b | Ollama: localhost
+    </p>
+
+    <div id="status"
+         class="text-muted mb-2">
+        Ready
+    </div>
+
+    <div id="chatResponse"
+         class="border rounded p-3 mb-3"
+         style="min-height:200px; white-space:pre-wrap;">
+    </div>
+
+    <textarea id="prompt"
+              class="form-control mb-3"
+              rows="4"
+              placeholder="Ask Qwen3 something..."></textarea>
+
+    <button id="sendButton"
+            type="button"
+            class="btn btn-primary"
+            onclick="sendMessage()">
+        Send
+    </button>
+
+    <button id="stopButton"
+            type="button"
+            class="btn btn-danger"
+            onclick="stopGeneration()"
+            disabled>
+        Stop
+    </button>
+
+</div>
+
+@section Scripts {
+
+    <script>
+
+        let controller = null;
+
+        async function sendMessage() {
+
+            const promptElement =
+                document.getElementById("prompt");
+
+            const responseElement =
+                document.getElementById("chatResponse");
+
+            const sendButton =
+                document.getElementById("sendButton");
+
+            const stopButton =
+                document.getElementById("stopButton");
+
+            const statusElement =
+                document.getElementById("status");
+
+            const message =
+                promptElement.value.trim();
+
+            if (!message)
+                return;
+
+            // Clear previous response
+            responseElement.textContent = "";
+
+            // Create cancellation controller
+            controller = new AbortController();
+
+            sendButton.disabled = true;
+            stopButton.disabled = false;
+
+            statusElement.textContent =
+                "Qwen is thinking...";
+
+            console.log("================================");
+            console.log("Sending message:", message);
+            console.log("POST /api/chat");
+            console.log("================================");
+
+            try {
+
+                const response = await fetch(
+                    "/api/chat",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            message: message
+                        }),
+
+                        signal: controller.signal
+                    }
+                );
+
+                console.log(
+                    "HTTP status:",
+                    response.status
+                );
+
+                console.log(
+                    "Response:",
+                    response
+                );
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        `HTTP error: ${response.status}`
+                    );
+                }
+
+                if (!response.body) {
+
+                    throw new Error(
+                        "Response body is empty."
+                    );
+                }
+
+                console.log(
+                    "Response body received."
+                );
+
+                const reader =
+                    response.body.getReader();
+
+                const decoder =
+                    new TextDecoder();
+
+                let receivedText = false;
+
+                while (true) {
+
+                    const {
+                        value,
+                        done
+                    } = await reader.read();
+
+                    console.log(
+                        "Reader result:",
+                        {
+                            done: done,
+                            bytes: value
+                                ? value.length
+                                : 0
+                        }
+                    );
+
+                    if (done)
+                        break;
+
+                    const text =
+                        decoder.decode(
+                            value,
+                            {
+                                stream: true
+                            }
+                        );
+
+                    console.log(
+                        "TEXT FROM SERVER:",
+                        text
+                    );
+
+                    if (text) {
+
+                        receivedText = true;
+
+                        responseElement.textContent +=
+                            text;
+
+                        responseElement.scrollTop =
+                            responseElement.scrollHeight;
+
+                        statusElement.textContent =
+                            "Qwen is responding...";
+                    }
+                }
+
+                // Flush remaining decoder data
+                const remaining =
+                    decoder.decode();
+
+                if (remaining) {
+
+                    console.log(
+                        "Remaining text:",
+                        remaining
+                    );
+
+                    responseElement.textContent +=
+                        remaining;
+                }
+
+                console.log(
+                    "Stream finished."
+                );
+
+                if (receivedText) {
+
+                    statusElement.textContent =
+                        "Completed";
+                }
+                else {
+
+                    statusElement.textContent =
+                        "No response received.";
+                }
+
+            }
+            catch (error) {
+
+                console.error(
+                    "Chat error:",
+                    error
+                );
+
+                if (error.name === "AbortError") {
+
+                    statusElement.textContent =
+                        "Generation stopped.";
+
+                    responseElement.textContent +=
+                        "\n\n[Generation stopped]";
+                }
+                else {
+
+                    statusElement.textContent =
+                        "Error";
+
+                    responseElement.textContent =
+                        "Error: " + error.message;
+                }
+            }
+            finally {
+
+                sendButton.disabled = false;
+                stopButton.disabled = true;
+
+                controller = null;
+            }
+        }
+
+        function stopGeneration() {
+
+            if (controller) {
+
+                console.log(
+                    "Stopping generation..."
+                );
+
+                controller.abort();
+            }
+        }
+
+    </script>
+}
