@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+
+# User-specific files
+*.user
+*.suo
+
+# Rider
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local configuration / secrets
+appsettings.Development.json
